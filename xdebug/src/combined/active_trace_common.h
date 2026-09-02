@@ -1,6 +1,7 @@
 #pragma once
 
 #include "api/json_types.h"
+#include "core/npi/compat.h"
 #include "core/npi/resource_guard.h"
 #include "core/npi/time_contract.h"
 #include "core/value/logic_value.h"
@@ -66,7 +67,8 @@ inline std::string fsdb_value_at(npiFsdbFileHandle fsdb,
     npiFsdbSigHandle sh = npi_fsdb_sig_by_name(fsdb, sig.c_str(), nullptr);
     if (!sh) return "";
     std::string raw;
-    int rc = npi_fsdb_sig_hdl_value_at(sh, time, raw, npiFsdbBinStrVal);
+    int rc = xdebug_core::npi_sig_hdl_value_at_compat(
+        sh, time, raw, npiFsdbBinStrVal);
     return rc ? raw : "";
 }
 

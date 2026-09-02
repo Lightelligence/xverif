@@ -10,6 +10,7 @@ BINARIES = (
     "test_core_types",
     "test_env_config",
     "test_unique_resource",
+    "test_npi_compat",
     "test_action_log",
     "test_file_exchange",
     "test_process_runner",

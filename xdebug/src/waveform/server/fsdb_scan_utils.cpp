@@ -1,5 +1,6 @@
 #include "fsdb_scan_utils.h"
 
+#include "core/npi/compat.h"
 #include "core/session/request_deadline.h"
 #include "npi_L1.h"
 
@@ -133,7 +134,8 @@ bool SampleCache::read(const std::vector<npiFsdbSigHandle>& handles,
         return true;
     }
     fsdbValVec_t raw;
-    if (!npi_fsdb_sig_hdl_vec_value_at(handles, time, raw, format) || raw.size() != handles.size()) {
+    if (!xdebug_core::npi_sig_hdl_vec_value_at_compat(
+            handles, time, raw, format) || raw.size() != handles.size()) {
         return false;
     }
     out_values.assign(raw.begin(), raw.end());

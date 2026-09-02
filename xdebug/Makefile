@@ -303,6 +303,14 @@ endef
 $(eval $(call CPP_UNIT_BINARY,test_core_types,$(CORE_OBJS),$(LDFLAGS)))
 $(eval $(call CPP_UNIT_BINARY,test_env_config,$(CORE_OBJS),$(LDFLAGS)))
 $(eval $(call CPP_UNIT_BINARY,test_unique_resource,,))
+
+# Compile the compatibility adapter against an original test double, without
+# vendor headers or libraries, so ABI/cleanup behavior remains testable.
+CPP_UNIT_BINARIES += $(BUILD)/tests/test_npi_compat
+$(BUILD)/tests/test_npi_compat: tests/unit/test_npi_compat.cpp tests/unit/npi_stub/npi_fsdb.h src/core/npi/compat.h src/core/common/unique_resource.h
+	@mkdir -p $(dir $@)
+	$(CXX) $(COMMON_CXXFLAGS) -Itests/unit/npi_stub -Isrc -o $@ $<
+
 $(eval $(call CPP_UNIT_BINARY,test_action_log,$(CORE_OBJS),$(LDFLAGS)))
 $(eval $(call CPP_UNIT_BINARY,test_file_exchange,$(CORE_OBJS),$(LDFLAGS)))
 $(eval $(call CPP_UNIT_BINARY,test_process_runner,$(CORE_OBJS),$(LDFLAGS)))

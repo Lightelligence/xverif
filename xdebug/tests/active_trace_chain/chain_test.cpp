@@ -1,4 +1,5 @@
 #include "chain_test.h"
+#include "core/npi/compat.h"
 
 #include "npi.h"
 #include "npi_hdl.h"
@@ -87,7 +88,8 @@ static std::string fsdb_value_at(npiFsdbFileHandle fsdb,
     if (!npi_fsdb_convert_time_in(fsdb, tv, unit.c_str(), ft)) return "";
 
     std::string raw;
-    int rc = npi_fsdb_sig_hdl_value_at(sh, ft, raw, npiFsdbBinStrVal);
+    int rc = xdebug_core::npi_sig_hdl_value_at_compat(
+        sh, ft, raw, npiFsdbBinStrVal);
     return rc ? raw : "";
 }
 
