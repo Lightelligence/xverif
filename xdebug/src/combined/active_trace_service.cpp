@@ -2,6 +2,7 @@
 #include "combined/active_trace_common.h"
 #include "api/response.h"
 #include "core/ai/common_blocks.h"
+#include "core/npi/compat.h"
 #include "core/npi/time_contract.h"
 #include "runtime/work_dir.h"
 
@@ -113,7 +114,8 @@ Json value_map(npiFsdbFileHandle fsdb,
     for (const auto& signal : signals) {
         npiFsdbSigHandle handle = npi_fsdb_sig_by_name(fsdb, signal.c_str(), nullptr);
         std::string raw;
-        int rc = handle ? npi_fsdb_sig_hdl_value_at(handle, time, raw, npiFsdbBinStrVal) : 0;
+        int rc = handle ? xdebug_core::npi_sig_hdl_value_at_compat(
+            handle, time, raw, npiFsdbBinStrVal) : 0;
         if (!handle || !rc) {
             values[signal] = nullptr;
             continue;

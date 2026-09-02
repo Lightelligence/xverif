@@ -3,6 +3,7 @@
 #include "../control_dep/control_dep.h"
 
 #include "json.hpp"
+#include "core/npi/compat.h"
 
 #include <algorithm>
 #include <cctype>
@@ -596,11 +597,10 @@ std::string TraceEngine::source_line(const std::string& file, int line) const {
     if (file.empty() || line <= 0) {
         return "";
     }
-    const stringVec_t* lines = npi_util_text_get_file_line_vec(const_cast<char*>(file.c_str()));
-    if (!lines || line > (int)lines->size()) {
+    std::string text;
+    if (!xdebug_core::read_source_file_line(file, line, text)) {
         return "";
     }
-    std::string text = (*lines)[line - 1];
     while (!text.empty() &&
            (text.back() == '\n' || text.back() == '\r' || text.back() == ' ' || text.back() == '\t')) {
         text.pop_back();

@@ -14,6 +14,7 @@
 #include "waveform/value/value_collection.h"
 #include "waveform/server/fsdb_value_reader.h"
 #include "core/value/logic_value.h"
+#include "core/npi/compat.h"
 #include "core/npi/time_contract.h"
 
 #include "npi_fsdb.h"
@@ -375,7 +376,7 @@ bool sample_dependencies(
             continue;
         }
         std::string raw;
-        if (!npi_fsdb_sig_hdl_value_at(
+        if (!xdebug_core::npi_sig_hdl_value_at_compat(
                 handle,
                 requested.value,
                 raw,

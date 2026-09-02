@@ -138,6 +138,17 @@ modport/mpport 是侧向关系，计入 visited/object budget，但不增加 hie
 - 不在 action handler 中手写四态比较或时间单位换算。
 - clock sampling 行为变化必须配套 tests 和文档。
 
+## NPI C++ ABI Compatibility
+
+路径：`src/core/npi/compat.h`。
+
+- value-at adapters 只通过 NPI C primitives 访问 FSDB；字符串与 vector 留在应用侧，
+  避免依赖 vendor L1 C++ helper 的 libstdc++ ABI。
+- traversal handle 用公共 `UniqueResource` 释放；只接受 binary/hex/decimal 字符串格式。
+- 向量查询保留输入顺序；任一信号失败时清空输出并返回失败，不发布部分值。
+- 源码行读取复用同一文件中的 `read_source_file_line`，行号从 1 开始。
+- 测试使用独立编写的 NPI double，纳入 `xdebug.cpp_unit`；不分发 vendor SDK。
+
 ## AXI Transaction Tracker
 
 路径：

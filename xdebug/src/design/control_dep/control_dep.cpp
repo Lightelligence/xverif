@@ -1,4 +1,5 @@
 #include "control_dep.h"
+#include "core/npi/compat.h"
 #include "core/npi/resource_guard.h"
 #include <cstdio>
 #include <cstring>
@@ -365,12 +366,10 @@ ControlDepInfo ControlDepTracer::make_control_dep_info(npiHandle control_stmt,
         return info;
     }
 
-    const stringVec_t* lines =
-        npi_util_text_get_file_line_vec(const_cast<char*>(info.file_name.c_str()));
-    if (!lines || info.line_no > static_cast<int>(lines->size())) {
+    if (!xdebug_core::read_source_file_line(
+            info.file_name, info.line_no, info.source_line)) {
         return info;
     }
-    info.source_line = (*lines)[info.line_no - 1];
     while (!info.source_line.empty() &&
            (info.source_line.back() == '\n' || info.source_line.back() == '\r' ||
             info.source_line.back() == ' ' || info.source_line.back() == '\t')) {

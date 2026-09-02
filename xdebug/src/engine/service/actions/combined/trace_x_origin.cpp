@@ -5,6 +5,7 @@
 #include "combined/active_trace_common.h"
 #include "combined/trace_x_origin_chain_identity.h"
 #include "core/output/completeness.h"
+#include "core/npi/compat.h"
 #include "core/npi/time_contract.h"
 #include "waveform/server/fsdb_scan_utils.h"
 #include "waveform/server/fsdb_value_reader.h"
@@ -95,7 +96,8 @@ bool read_point(npiFsdbFileHandle fsdb,
     npiFsdbSigHandle handle = npi_fsdb_sig_by_name(fsdb, signal.c_str(), nullptr);
     if (!handle) return false;
     std::string raw;
-    if (!npi_fsdb_sig_hdl_value_at(handle, tick, raw, npiFsdbBinStrVal)) return false;
+    if (!xdebug_core::npi_sig_hdl_value_at_compat(
+            handle, tick, raw, npiFsdbBinStrVal)) return false;
     point.signal = signal;
     point.tick = tick;
     point.time = xdebug_core::format_time(fsdb, tick);

@@ -60,6 +60,34 @@ Action 协议由 `ActionSpec` / `ActionRegistry` 约束。`actions` 输出来自
 
 ## Quick Start
 
+### Build the complete runtime
+
+在已配置合法 Synopsys 安装和 C++ 工具链的 shell 中，从仓库根目录运行：
+
+```bash
+make -C xdebug all
+test -x xdebug/xdebug
+test -x xdebug/libexec/xdebug-engine
+```
+
+frontend 和 `libexec/xdebug-engine` 缺一不可：仅能运行 help/actions 不代表
+design/waveform 查询可用。安装时保留两者的相对目录布局；更换 Verdi 或编译器后，
+在新的独立工作区重建完整 runtime，再验证后部署，避免混用旧 object 或只更新 frontend。
+
+NPI 的部分 L1 C++ helper 可能与本机编译器使用不同的 libstdc++ ABI。内部
+`src/core/npi/compat.h` 通过底层 C API 读取指定时刻的字符串值，并在应用侧读取源码行，
+不跨 vendor library 边界传递 `std::string`/`std::vector`。这不代替合法的 NPI 安装，
+也不改变信号名解析或公开查询协议。
+
+兼容 helper 的测试已纳入现有 catalog suite（无需私有波形或 vendor header）：
+
+```bash
+XVERIF_TEST_EXECUTION_ENV=host pytest --xverif-gate regression --xverif-suite xdebug.cpp_unit
+```
+
+该 suite 的其他 C++ 测试仍可能需要本地 NPI 构建依赖。完整验证还需在目标运行环境使用
+已有 FSDB 检查 native 和 MCP 查询；未 dump 的信号仍应返回错误，不能由适配层补造数据。
+
 `-h` 和 `-help` 是 xdebug 唯一的非 JSON 命令，用于查看详尽的人类可读帮助：
 
 ```bash

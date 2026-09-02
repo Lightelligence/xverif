@@ -1,6 +1,7 @@
 #include "fsdb_value_reader.h"
 
 #include <algorithm>
+#include "core/npi/compat.h"
 #include "npi_fsdb.h"
 #include "npi_L1.h"
 #include "fsdb_scan_utils.h"
@@ -62,7 +63,8 @@ bool read_sig_value_at(npiFsdbFileHandle file,
                        char fmt,
                        std::string& out_value) {
     npiFsdbValType vtype = parse_format(fmt);
-    if (npi_fsdb_sig_value_at(file, signal_path, time, out_value, vtype)) {
+    if (xdebug_core::npi_sig_value_at_compat(
+            file, signal_path, time, out_value, vtype)) {
         return true;
     }
     return false;
@@ -74,11 +76,9 @@ bool read_sig_vec_value_at(npiFsdbFileHandle file,
                            char fmt,
                            std::vector<std::string>& out_values) {
     if (signals.empty()) return false;
-    fsdbSigNameVec_t sigNames(signals.begin(), signals.end());
-    fsdbValVec_t values;
     npiFsdbValType vtype = parse_format(fmt);
-    if (npi_fsdb_sig_vec_value_at(file, sigNames, time, values, vtype)) {
-        out_values.assign(values.begin(), values.end());
+    if (xdebug_core::npi_sig_vec_value_at_compat(
+            file, signals, time, out_values, vtype)) {
         return true;
     }
     return false;

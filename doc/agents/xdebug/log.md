@@ -1,5 +1,12 @@
 # xdebug 架构说明书维护日志
 
+## 2026-09-02
+
+- NPI value-at 与源码行读取改用应用侧兼容 helper，消除对 vendor L1 C++ helper ABI 的依赖；
+  不改变 public action/schema，错误路径保持显式失败。
+- 补充无需 proprietary SDK 的 helper 单元测试，注册到已有 C++ suite；文档明确必须同时构建
+  frontend 和 `libexec/xdebug-engine`，避免只有 frontend 时误判 runtime 可用。
+
 ## 2026-08-16
 
 - 新增公共 atomic artifact publisher，APB、AXI、stream exporter 统一使用同目录暂存、

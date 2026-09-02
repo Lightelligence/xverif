@@ -2,6 +2,8 @@
 
 #include "core/session/request_deadline.h"
 
+#include "core/npi/compat.h"
+
 #include "core/npi/time_contract.h"
 #include "waveform/server/fsdb_scan_utils.h"
 
@@ -211,7 +213,8 @@ bool ClockValueReader::read_current(npiFsdbFileHandle fsdb,
     fsdbSigVec_t handles;
     handles.push_back(handle);
     fsdbValVec_t values;
-    if (!npi_fsdb_sig_hdl_vec_value_at(handles, time, values, format) || values.size() != 1) {
+    if (!xdebug_core::npi_sig_hdl_vec_value_at_compat(
+            handles, time, values, format) || values.size() != 1) {
         cell.status = "missing_value";
         cell.raw_value.clear();
         return false;
@@ -292,7 +295,8 @@ bool ClockSampleScanner::scan(const std::vector<ClockSampleSignal>& signals,
 
     fsdbValVec_t init_values;
     npiFsdbTime init_time = begin > 0 ? begin - 1 : begin;
-    if (!npi_fsdb_sig_hdl_vec_value_at(all_handles, init_time, init_values, format) ||
+    if (!xdebug_core::npi_sig_hdl_vec_value_at_compat(
+            all_handles, init_time, init_values, format) ||
         init_values.size() != all_handles.size()) {
         error = "Failed to read initial sampled values";
         return false;
@@ -436,7 +440,8 @@ bool ClockExpressionSampleScanner::scan(
 
     fsdbValVec_t init_values;
     npiFsdbTime init_time = begin > 0 ? begin - 1 : begin;
-    if (!npi_fsdb_sig_hdl_vec_value_at(all_handles, init_time, init_values, format) ||
+    if (!xdebug_core::npi_sig_hdl_vec_value_at_compat(
+            all_handles, init_time, init_values, format) ||
         init_values.size() != all_handles.size()) {
         error = "Failed to read initial expression clock values";
         return false;
