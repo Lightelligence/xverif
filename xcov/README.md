@@ -7,9 +7,18 @@
 
 xcov 的 summary 读取固定使用 URG
 `-full64 -xml_verbose -format text -show summary` 生成的 typed `session.xml`
-和五个 summary 文本文件，不生成完整 HTML、`modinfo.txt` 或 `grpinfo.txt`。
+与 summary 文本文件，不生成完整 HTML、`modinfo.txt` 或 `grpinfo.txt`。
+`session.xml`、`tests.txt`、`dashboard.txt` 始终必需；其余报告按 XML 中实际
+存在的 coverage 类型要求：RTL instance 需要 `modlist.txt`，功能覆盖率需要
+`groups.txt`，assertion/cover property 需要 `asserts.txt`。已有文件仍必须非空、
+不是符号链接，并满足大小限制；不能用空文件补齐缺失报告。
 code、assertion 和 functional coverage 按各自 XML `type` 建模；详细 gap 导出
 使用受限 URG text report。公开 summary 只发布该固定产物能够稳定支持的字段。
+
+纯功能覆盖率 VDB 不要求存在 RTL instance；URG 输出的空、无计分定义不被伪造为
+0% 条目，带计分属性的 scope 缺少 metric 仍报错。查询未收集的 line/branch 时，
+空结果不表示 0% 或 100%。缓存记录实际报告集合并校验哈希，解析版本变更会生成
+新的缓存 identity；首次生成和后续缓存命中应保持相同查询结果。
 
 action、session、transport、backend 或 VDB 查询失败时不会静默切换 surface、
 backend、data source 或测试层级。失败返回结构化错误；任何不同路径必须由调用方
