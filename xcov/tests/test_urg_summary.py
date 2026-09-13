@@ -904,3 +904,106 @@ def test_parser_rejects_missing_required_artifact(tmp_path):
     with pytest.raises(XcovError) as raised:
         parse_urg_summary(report)
     assert raised.value.code == "URG_SUMMARY_INCOMPLETE"
+
+
+# Append to xcov/tests/test_urg_summary.py after its existing tests.
+
+FUNCTIONAL_ONLY_XML = '''<session version="1.1">
+<hvp><datadef><metdef name="Group" type="ratio" aggregator="average" builtin="1" /></datadef></hvp>
+<old_coverage>
+<scope type="Groups" name="top">
+  <attr type="Group Summary" value="1/2" />
+  <scope type="Cover Group" name="cg">
+    <scope type="Covergroup Variant" name="top::cg">
+      <metric name="Group" value="1/2" excl="0" />
+      <scope type="Coverage Instance" name="cg_i">
+        <metric name="Group" value="1/2" excl="0" />
+        <scope type="Coverage Point" name="empty" />
+        <scope type="Coverage Point" name="scored">
+          <metric name="Point" value="1/2" excl="0" />
+          <attr name="Score" value="50%" />
+        </scope>
+      </scope>
+    </scope>
+    <scope type="Covergroup Variant" name="top::unused" />
+  </scope>
+</scope>
+<scope type="Asserts" name="top" />
+<scope type="assert" name="Statistics" />
+</old_coverage></session>'''
+
+
+def _functional_only_report(tmp_path, xml=FUNCTIONAL_ONLY_XML):
+    report = _report(tmp_path, xml)
+    (report / 'modlist.txt').unlink()
+    (report / 'asserts.txt').unlink()
+    return report
+
+
+def test_functional_only_report_has_scores_without_rtl_instances(tmp_path):
+    from xcov.urg_summary import validate_summary_artifacts
+
+    report = _functional_only_report(tmp_path)
+    index = parse_urg_summary(report)
+    assert index.metric_names == ('Group',)
+    assert index.scopes == ()
+    assert index.assertion_rows == ()
+    assert len(index.functional_rows) == 2
+    assert all(row['coverage_pct'] == 50.0 for row in index.functional_rows)
+    assert _code_coverage_from_urg(index.scope_metrics, 'metric', ['line', 'branch']) == []
+    assert set(validate_summary_artifacts(report)) == {
+        'session.xml', 'tests.txt', 'dashboard.txt', 'groups.txt',
+    }
+
+
+def test_functional_only_report_still_requires_groups(tmp_path):
+    report = _functional_only_report(tmp_path)
+    (report / 'groups.txt').unlink()
+    with pytest.raises(XcovError) as raised:
+        parse_urg_summary(report)
+    assert raised.value.code == 'URG_SUMMARY_INCOMPLETE'
+    assert raised.value.detail['missing'] == ['groups.txt']
+
+
+def test_functional_only_scored_point_cannot_lose_metric(tmp_path):
+    xml = FUNCTIONAL_ONLY_XML.replace('<metric name="Point" value="1/2" excl="0" />', '')
+    with pytest.raises(XcovError) as raised:
+        parse_urg_summary(_functional_only_report(tmp_path, xml))
+    assert 'score metric' in raised.value.message
+
+
+def test_assertion_leaf_requires_assert_report(tmp_path):
+    xml = FUNCTIONAL_ONLY_XML.replace('<scope type="Asserts" name="top" />',
+        '<scope type="Asserts" name="top"><scope type="Assertion" name="top.a" /></scope>')
+    with pytest.raises(XcovError) as raised:
+        parse_urg_summary(_functional_only_report(tmp_path, xml))
+    assert raised.value.detail['missing'] == ['asserts.txt']
+
+
+def test_functional_only_cache_publishes_actual_artifacts(monkeypatch, tmp_path):
+    from xcov import urg_cache
+    import shutil
+
+    report = _functional_only_report(tmp_path)
+    vdb = tmp_path / 'source.vdb'
+    vdb.mkdir()
+    (vdb / 'data').write_text('functional')
+    monkeypatch.setattr(urg_cache, '_urg_identity', lambda: {
+        'path': 'vcs-bin/urg', 'size_bytes': 1, 'mtime_ns': 1,
+    })
+    class Runner:
+        calls = 0
+        def run(self, argv, timeout=None):
+            self.calls += 1
+            target = Path(argv[argv.index('-report') + 1])
+            for path in report.iterdir():
+                shutil.copy2(path, target / path.name)
+            return SimpleNamespace(returncode=0, stdout='', stderr='')
+    runner = Runner()
+    first, cold = urg_cache.load_cached_urg_summary(str(vdb), cache_root=tmp_path / 'cache', runner=runner)
+    second, warm = urg_cache.load_cached_urg_summary(str(vdb), cache_root=tmp_path / 'cache', runner=runner)
+    assert cold['hit'] is False and warm['hit'] is True
+    assert runner.calls == 1
+    assert first.functional_rows == second.functional_rows
+    manifest = __import__('json').loads((Path(cold['entry']) / 'manifest.json').read_text())
+    assert set(manifest['artifacts']) == {'session.xml', 'tests.txt', 'dashboard.txt', 'groups.txt'}

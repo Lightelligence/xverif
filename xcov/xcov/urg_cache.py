@@ -19,7 +19,6 @@ from .errors import XcovError
 from .provenance import resource_sha256
 from .urg_runner import UrgRunner
 from .urg_summary import (
-    REQUIRED_ARTIFACTS,
     UrgSummaryIndex,
     parse_urg_summary,
     validate_summary_artifacts,
@@ -28,7 +27,7 @@ from .urg_summary import (
 Json = Dict[str, Any]
 
 CACHE_SCHEMA_VERSION = "xcov.urg-summary-cache.v1"
-PARSER_SCHEMA_VERSION = "xcov.urg-summary-ir.v1"
+PARSER_SCHEMA_VERSION = "xcov.urg-summary-ir.v2"
 CACHE_CAPACITY_CONTRACT = "best_effort_soft_admission"
 FIXED_SUMMARY_OPTIONS = (
     "-xml_verbose", "-format", "text", "-show", "summary",
@@ -393,7 +392,7 @@ def load_cached_urg_summary(
             )
             os.replace(manifest_tmp, stage / "manifest.json")
             (stage / "COMPLETE").write_text(key + "\n", encoding="ascii")
-            for artifact_name in REQUIRED_ARTIFACTS:
+            for artifact_name in artifacts:
                 _fsync_file(report / artifact_name)
             _fsync_file(stage / "manifest.json")
             _fsync_file(stage / "COMPLETE")

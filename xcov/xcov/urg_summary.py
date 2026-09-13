@@ -98,9 +98,11 @@ def validate_summary_artifacts(report_dir: str | Path) -> Dict[str, Path]:
             report_dir=str(root),
         )
     paths = {name: root / name for name in REQUIRED_ARTIFACTS}
+    present = {name: path for name, path in paths.items() if path.exists() or path.is_symlink()}
+    required = {"session.xml", "tests.txt", "dashboard.txt"}
     missing = [
         name for name, path in paths.items()
-        if not path.is_file() or path.is_symlink()
+        if (name in required or name in present) and (not path.is_file() or path.is_symlink())
     ]
     empty = [
         name for name, path in paths.items()
@@ -114,7 +116,7 @@ def validate_summary_artifacts(report_dir: str | Path) -> Dict[str, Path]:
             missing=missing,
             empty=empty,
         )
-    sizes = {name: path.stat().st_size for name, path in paths.items()}
+    sizes = {name: path.stat().st_size for name, path in present.items()}
     oversized = [name for name, size in sizes.items() if size > MAX_ARTIFACT_BYTES]
     total_size = sum(sizes.values())
     if oversized or total_size > MAX_ARTIFACT_TOTAL_BYTES:
@@ -125,7 +127,26 @@ def validate_summary_artifacts(report_dir: str | Path) -> Dict[str, Path]:
             resource_count=total_size,
             max_resource_count=MAX_ARTIFACT_TOTAL_BYTES,
         )
-    return paths
+    # URG omits reports for coverage families absent from a valid database.
+    # Classify the bounded XML; do not synthesize empty report artifacts.
+    try:
+        for _, element in ET.iterparse(paths["session.xml"], events=("end",)):
+            if element.tag == "scope":
+                scope_type = element.get("type")
+                if scope_type == "instance":
+                    required.add("modlist.txt")
+                elif scope_type in FUNCTIONAL_TYPES:
+                    required.add("groups.txt")
+                elif scope_type in {"Assertion", "Cover Property"}:
+                    required.add("asserts.txt")
+            element.clear()
+    except ET.ParseError as exc:
+        raise _xml_error(paths["session.xml"], "session.xml is not well-formed XML") from exc
+    missing = sorted(required - present.keys())
+    if missing:
+        raise XcovError("URG_SUMMARY_INCOMPLETE", "URG report is missing artifacts for present coverage types",
+                        report_dir=str(root), missing=missing, empty=[])
+    return present
 
 
 def parse_urg_summary(report_dir: str | Path) -> UrgSummaryIndex:
@@ -189,6 +210,8 @@ def _parse_xml(xml_path: Path, tests: Tuple[str, ...]) -> UrgSummaryIndex:
                 if elem.tag == "old_coverage":
                     saw_old_coverage = True
                 elif elem.tag == "scope":
+                    if stack:
+                        stack[-1]["child_scopes"] += 1
                     stack.append(_scope_context(elem, stack))
                 continue
 
@@ -234,8 +257,8 @@ def _parse_xml(xml_path: Path, tests: Tuple[str, ...]) -> UrgSummaryIndex:
         raise _xml_error(xml_path, "scope stack is not empty at end of document")
     if not saw_old_coverage:
         raise _xml_error(xml_path, "session.xml is missing old_coverage")
-    if not scope_rows:
-        raise _xml_error(xml_path, "session.xml contains no instance scopes")
+    if not scope_rows and not functional_rows and not assertion_rows:
+        raise _xml_error(xml_path, "session.xml contains no typed coverage rows")
     if not metric_names:
         raise _xml_error(xml_path, "session.xml contains no builtin metric definitions")
 
@@ -361,6 +384,7 @@ def _scope_context(elem: ET.Element, stack: List[Json]) -> Json:
         ),
         "metrics": {},
         "attrs": {},
+        "child_scopes": 0,
     }
 
 
@@ -415,6 +439,8 @@ def _functional_row(ctx: Json, xml_path: Path) -> Optional[Json]:
         return None
     ratio = ctx["metrics"].get(metric_name)
     if ratio is None:
+        if scope_type in FUNCTIONAL_TYPES and not ctx["metrics"] and not ctx["attrs"] and not ctx["child_scopes"]:
+            return None  # URG emits empty, non-scoring definitions and points.
         if ctx.get("group_instance_summary") == "0/0":
             ratio = {
                 "covered": 0,
