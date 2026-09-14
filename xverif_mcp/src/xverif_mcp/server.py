@@ -1047,8 +1047,10 @@ def xverif_bit_eval(expr: str, vars: Optional[dict] = None, width: int = 0,
                      output_format: Literal["xout", "json"] = "xout") -> Any:
     """Evaluate a deterministic bit/expression calculation.
 
+    Example: {"expr": "8'h10 + 8'h01", "output_format": "json"}
+
     Args:
-        expr: Expression string (e.g. "0x10 + 0x1", "sig_a & sig_b").
+        expr: Expression using decimal or SV literals (e.g. "8'h10 + 8'h01", "sig_a & sig_b").
         vars: Dict of variable name to literal value.
         width: Resize result to N bits.
         signed: Treat as signed value.
@@ -1081,12 +1083,14 @@ def xverif_bit_check(expr: str, vars: Optional[dict] = None,
                       values: Optional[str] = None,
                       state: Literal["2", "4"] = "2",
                       output_format: Literal["xout", "json"] = "xout") -> Any:
-    """Check a bit expression against expected values.
+    """Evaluate a condition using variable bindings; matched reports its truth value.
+
+    Example: {"expr": "actual == expected", "vars": {"actual": "8'h11", "expected": "8'h11"}, "output_format": "json"}
 
     Args:
-        expr: Expression to evaluate.
-        vars: Dict of variable name to literal value.
-        values: Expected values to check against.
+        expr: Condition to evaluate, with any expected-value comparison written explicitly.
+        vars: Inline variable-to-literal map; mutually exclusive with values.
+        values: Path to a JSON file containing a direct variable-to-literal map, not an expected value. Mutually exclusive with vars.
         state: 2 or 4 state encoding (default: 2).
         output_format: "json" or "xout".
     """
@@ -1398,7 +1402,7 @@ TOOL_CATALOG = [
      "description": "Extract a bit slice from a value."},
     {"name": "xverif_bit_check", "category": "bit", "backend": "xbit",
      "stateful": False, "requires_session": False,
-     "description": "Check a bit expression against expected values."},
+     "description": "Evaluate a condition with variable bindings; matched reports its truth value."},
     # entry
     {"name": "xverif_entry_decode", "category": "entry", "backend": "xentry",
      "stateful": False, "requires_session": False,
