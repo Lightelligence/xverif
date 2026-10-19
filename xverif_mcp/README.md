@@ -322,6 +322,68 @@ with open("<repo>/tmp/batch_results.ndjson") as f:
 
 Claude Code 启动时自动加载项目根目录下的 `.mcp.json`，无需额外配置。
 
+### 通过 ssh 连接远端 xverif MCP
+
+当 EDA 机器与本机不是同一台时，用 `mcp_ssh` 把远端的 xverif MCP server 通过 ssh 暴露成本地
+stdio MCP server。对 MCP client 来说它和本地 server 没有区别：
+
+```json
+{
+  "mcpServers": {
+    "xverif-remote": {
+      "command": "<conda-env>/bin/python",
+      "args": ["-m", "mcp_ssh"],
+      "env": {
+        "PYTHONPATH": "<xverif>/xverif_mcp/src",
+        "XVERIF_MCP_SSH_HOST": "user@eda-host",
+        "XVERIF_MCP_SSH_REMOTE_ROOT": "/shared/xverif",
+        "XVERIF_MCP_SSH_REMOTE_PYTHON": "/shared/xverif/.conda-xverif/bin/python",
+        "XVERIF_MCP_LOG_DIR": "/shared/xverif/.xverif/mcp"
+      }
+    }
+  }
+}
+```
+
+配置项（全部放在 MCP client 的 `env` 中）：
+
+| 变量 | 说明 |
+| --- | --- |
+| `XVERIF_MCP_SSH_HOST` | 必填，`ssh` 的目标，例如 `user@eda-host` |
+| `XVERIF_MCP_SSH_REMOTE_ROOT` | 必填，远端 xverif 仓库根目录（两机共享路径，见下） |
+| `XVERIF_MCP_SSH_REMOTE_PYTHON` | 远端解释器，默认 `python3`，要求 Python >= 3.11 |
+| `XVERIF_MCP_SSH_REMOTE_COMMAND` | 远端命令 JSON 数组，默认 `["-m", "xverif_mcp.server"]` |
+| `XVERIF_MCP_SSH_PORT` | `ssh -p` 端口 |
+| `XVERIF_MCP_SSH_IDENTITY` | `ssh -i` 私钥**路径**；本程序不读取、不复制、不写入任何密钥内容 |
+| `XVERIF_MCP_SSH_OPTIONS` | 追加 ssh 选项，按 shell 分词，例如 `-o StrictHostKeyChecking=accept-new` |
+| `XVERIF_MCP_SSH_SSH_BIN` | 覆盖 `ssh` 可执行文件，默认 `ssh` |
+| `XVERIF_MCP_SSH_ENV_DENY` | 逗号分隔的额外变量名，禁止转发到远端 |
+
+它只做转发，不解释 xverif 语义：`tools/list` 的 schema 与 `tools/call` 的
+`content`/`isError`/`structuredContent` 都原样透传，工具的语义始终由远端 server 决定。因此
+每个 MCP 连接对应一个独立的远端 server 进程，远端的 session 生命周期与直连时完全一致。
+
+`env` 中除本程序自身配置之外的变量都会转发给远端进程；凭据形状的名字、描述本机的变量
+（`HOME`、`USER`、`SSH_AUTH_SOCK`、本机 ssh/shell 簿记）、本机 Python/conda 与测试路径会被
+自动排除。**不需要共享 `$HOME`**：会话完全在远端，状态落在远端自己的 `$HOME/.xdebug`；跨机器
+共享 `~/.xdebug` 只对 `xdebug` 的 cluster file transport 有意义。远端 server 的日志目录由
+转发的 `XVERIF_MCP_LOG_DIR` 决定，不设置时落在远端 `$HOME/.xverif/mcp`。
+
+配置自检：
+
+```bash
+python -m mcp_ssh --check          # 只打印变量名和工具数，不打印任何取值
+```
+
+远端已启动后的环境核对（在远端、经同一条链路执行）：
+
+```bash
+python -m mcp_ssh.report <remote-root>   # 打印远端解释器、变量名与仓库位置
+```
+
+注意：xdebug/xcov 的 session 状态按远端 `$HOME` 归属，跨机器复用时两台机器的 `$HOME`
+必须指向同一份共享存储；否则请在原机器上直连，或让远端每次重新 open session。
+
 ## 运行链路
 
 ```text
@@ -399,6 +461,7 @@ symlink、非当前用户 owner 和非 `0600` 文件。
 | `XVERIF_LSF_BSUB` | 覆盖 `bsub` 命令（默认 `bsub`） |
 | `XVERIF_LSF_SESSION_QUEUE` | session job 的 LSF 队列（默认 `interactive`） |
 | `XVERIF_LSF_SESSION_RESOURCE` | session job 的 LSF resource string（默认省略） |
+| `XVERIF_LSF_SESSION_WALL_TIME_SEC` | session job 的 LSF `-W` runtime limit，单位秒（默认 7200，即 `-W 120`）；MCP 与 SDK-free LSF CLI 共用 |
 | `XVERIF_LSF_BKILL` | 覆盖 `bkill` 命令 |
 | `XVERIF_XCOV_BIN` | 覆盖 xcov 可执行文件路径，默认 `tools/xcov` |
 | `XVERIF_XCOV_PYTHON` | 覆盖 xcov 使用的 Python runtime |
@@ -411,6 +474,7 @@ symlink、非当前用户 owner 和非 `0600` 文件。
 | `XVERIF_XCOV_URG_RESOURCE` | 可选内层 URG resource string |
 | `XVERIF_XCOV_URG_STARTUP_TIMEOUT_SEC` | 内层 URG job PEND→running 超时，默认 120s |
 | `XVERIF_XCOV_URG_RUN_TIMEOUT_SEC` | 内层 URG running 超时，默认 600s |
+| `XVERIF_XCOV_URG_WALL_TIME_SEC` | 内层 `bsub -K` URG job 的 LSF `-W` runtime limit，单位秒（默认 7200，即 `-W 120`） |
 | `XVERIF_MCP_FAKE_LSF` | 仅 MCP namespace 的显式 fake LSF，严格布尔 `0|1` |
 | `XVERIF_LSF_CLI_SOCKET` | SDK-free LSF CLI 内部 socket 路径；不提供公开 `--socket` 参数 |
 | `XVERIF_LSF_CLI_LOG_DIR` | SDK-free LSF CLI structured log 根目录，默认 `~/.xverif/lsf-cli` |
@@ -426,9 +490,12 @@ symlink、非当前用户 owner 和非 `0600` 文件。
 
 所有 timeout 变量只接受无首尾空白的有限正数；布尔或 timeout 配置非法时立即返回明确错误。MCP 与 SDK-free LSF CLI 的 fake LSF 开关互不别名，也不会在启动、请求或 cleanup 失败时自动切换 backend。
 
+`XVERIF_LSF_SESSION_WALL_TIME_SEC` 与 `XVERIF_XCOV_URG_WALL_TIME_SEC` 同样只接受无首尾空白的有限正数秒，上限 31536000（一年），向上取整到 LSF `-W` 的分钟粒度（7200 → `-W 120`）。它们不是客户端超时，而是提交给 LSF 的 runtime limit：客户端（agent/MCP server/CLI）被 SIGKILL 后本地清理链无法执行，只有 `-W` 能让 LSF 侧兜底回收 job。`XVERIF_LSF_BSUB` 里自带 `-W` 时，MCP session 提交与 xcov 内层 URG 都会直接报错，不产生 argv 与 `scheduler` 记录的静默漂移。
+
 当外层 xcov session 和内层 URG 都使用 LSF 时，外层始终是一个长期
-`bsub -I tools/xcov --stdio-loop`，每个 cold URG 则是独立 `bsub -K`。两个 queue/resource
-命名空间必须分别配置；warm summary cache hit 不提交内层 job。所有 coverage 输入、EL、
+`bsub -I tools/xcov --stdio-loop`（带 `-W <session wall time>`），每个 cold URG 则是独立
+`bsub -K -W <urg wall time>`。两个 queue/resource/wall-time 命名空间必须分别配置；warm summary
+cache hit 不提交内层 job。所有 coverage 输入、EL、
 cache、report 与临时 hier 必须位于登录节点和计算节点共同可见的绝对路径。
 
 xdebug/xcov stateful session 会写结构化 MCP 日志：
@@ -480,6 +547,16 @@ xverif_cov_query
 两组生命周期工具遵循相同 managed contract：open 使用 `name` 请求 canonical `session_id`，且 backend 返回值必须与 `name` 完全一致；query/doctor/close/kill 只接受精确 `session_id`，不接受 `session` 或 `name`，kill 不接受 `all`。list 支持 `include_tombstones`/`verbose`，doctor 只读且不会 reopen。compact record 返回 session_id/ownership/backend/launcher/state、资源 basename/hash 和结构化 scheduler truth；verbose 再展开 PID、兼容 job 字段、完整路径和 cleanup 诊断。
 
 xdebug detached backend 可能比 stdio-loop 活得更久，dead loop 只由固定 native admin path 精确 doctor/kill；xcov backend 由 loop 进程拥有，kill 只终止 loop/process/LSF job，并明确返回 native kill `not_supported`。任一 cleanup 阶段失败时返回 `SESSION_CLEANUP_PARTIAL_FAILURE`、`error_layer=session_manager` 并保留 unresolved tombstone。debug/cov query 均拒绝 native lifecycle action，不会 fallback 到其它 transport 或 backend。
+
+session 自行退出（引擎崩溃、LSF `-W` 到期、stdin EOF）后：`refresh_state()` 把 `state` 从 `alive`
+降级为 `dead`（证据含 `loop_returncode`/`job_id`/`wall_time_minutes`）；`kill` 只在这种"自有 loop
+已退出"证据成立时，向 native `session.close mode=force` 附加 `retire_unreachable=true`——native 仅在
+引擎完全不可达时退役该 generation（响应 `summary.retired_unreachable=true`，`cleanup.native_kill
+="retired_unreachable"`、`cleanup.engine_confirmation="unreachable"`，**不声称引擎进程已停止**）。
+退役后 session 进入 `closed`：`closed` tombstone 不再阻止同名 `session_open`；`cleanup_partial` /
+`orphan_suspected` 仍返回 `SESSION_TOMBSTONE_EXISTS`（带 `next_actions` 指向 kill），`gc` 会对 loop
+已确认退出的 unresolved 记录重试一次回收并在 summary 发布 `retired_count`。graceful close 遇到
+loop 已退出不静默升级，返回 `SESSION_LOST` + `next_actions`。
 
 `xverif_debug_session_open` 与 `xverif_cov_session_open` 都接受可选 `run_manifest`。
 它们会在启动后端前严格校验已发布的资源清单：xdebug 使用

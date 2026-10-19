@@ -20,6 +20,18 @@ suites:
     deterministic: true
     cost: {class: fast, estimate_sec: 2}
 
+  - id: xbit.sv_oracle
+    owner: xbit
+    level: component
+    intent: [contract, semantics]
+    domains: [bit, sv]
+    runner: {kind: pytest, path: xbit/tests/sv_oracle}
+    capabilities: [child_process]
+    hermetic: false
+    deterministic: true
+    cost: {class: medium, estimate_sec: 60}
+    timeouts: {execute_sec: 300, cleanup_sec: 20}
+
   - id: xentry.unit
     owner: xentry
     level: unit
@@ -201,7 +213,7 @@ suites:
     owner: xdebug
     level: static
     intent: [contract]
-    domains: [schema, action]
+    domains: [schema, action, build]
     runner:
       kind: pytest
       paths:
@@ -212,6 +224,7 @@ suites:
         - xdebug/tests/static/test_publish_run_manifest.py
         - xdebug/tests/static/test_validation_issue_response_contract.py
         - xdebug/tests/static/test_available_values_contract.py
+        - xdebug/tests/static/test_npi_toolchain_contract.py
     hermetic: true
     deterministic: true
     cost: {class: fast, estimate_sec: 5}
@@ -362,6 +375,8 @@ suites:
         - xverif_mcp/tests/test_backend_wiring.py
         - xverif_mcp/tests/test_import_adapters.py
         - xverif_mcp/tests/test_lsf_env_config.py
+        - xverif_mcp/tests/test_mcp_ssh_bridge.py
+        - xverif_mcp/tests/test_process_termination.py
         - xverif_mcp/tests/test_session_capabilities.py
         - xverif_mcp/tests/test_session_errors.py
         - xverif_mcp/tests/test_schema_projection.py
@@ -384,6 +399,8 @@ suites:
         - xverif_mcp/tests/test_loop_wrapper_uds.py
         - xverif_mcp/tests/test_native_lsf_cli.py
         - xverif_mcp/tests/test_mcp_sdk_smoke.py
+        - xverif_mcp/tests/test_mcp_shutdown.py
+        - xverif_mcp/tests/test_mcp_ssh_loopback.py
         - xverif_mcp/tests/test_stdio_loop_session_lifecycle.py
     capabilities: [child_process, mcp_process]
     hermetic: false

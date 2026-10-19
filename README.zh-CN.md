@@ -9,7 +9,7 @@
 >
 > `xdebug` 和 `xcov` 的部分能力需要用户在本地另行取得合法授权并安装相应 Synopsys software；设置 `VERDI_HOME` 或能够访问相关文件本身不代表已经获得 NPI/FSDB API 的使用权或 redistribution 权。不得把 `libNPI.so`、`libnpiL1.so`、`libnffr.so`、Synopsys headers/documentation，或包含这些内容的 binary、package、container image 随本仓库分发。具体边界见 [`THIRD_PARTY.md`](THIRD_PARTY.md)。
 
-`xverif` 是面向芯片验证 debug agent 的本地工具仓库，当前包含六个核心工具、两个 agent skill 和一个统一 MCP 入口：
+`xverif` 是面向芯片验证 debug agent 的本地工具仓库，提供确定性的设计/波形调试、coverage、bit 计算、entry 解析、日志位置还原、SVA 语义、验证知识持续记忆能力，以及统一的 MCP 入口：
 
 - [`xdebug`](xdebug/README.md)：查询设计数据库和波形数据库里的事实。
 - [`xbit`](xbit/README.md)：确定性计算 bit、literal、slice、表达式和 expected value。
@@ -19,11 +19,14 @@
 - [`xsimdebug`](skills/xsimdebug/SKILL.md)：通过终端 PTY 实时操作 VCS UCLI 或 Xcelium Tcl 调试仿真。
 - [`xsva`](xsva/README.md)：把 SystemVerilog Assertion 编译为结构化 IR，并生成确定性解释和可视化。
 - [`xcov`](xcov/README.md)：查询 VCS/Verdi coverage database，输出 compact coverage evidence。
+- [`xwaveform`](xwaveform/README.md)：把 xdebug `list.export` 的波形数据渲染成 JPG 和 stats 文件，供宏观观察。
 - [`xverif-mcp`](xverif_mcp/README.md)：统一 MCP server，xdebug/xcov 作为 stateful backend，其他工具以 stateless CLI adapter 接入。
 
-简单说：`xdebug` 负责“事实从哪里来、某时刻发生了什么”，`xbit` 负责“这些值按 SystemVerilog 规则算出来到底是多少”，`xentry` 负责“这个 entry 的 bit 域段按配置切出来是什么”，`xloc` 负责“这条 log 在哪个文件的哪一行，但只在需要时才查”，`xwiki` 负责“把验证环境、DUT 功能、workflow、debug 入口等知识编译进持续 LLM wiki”，`xsimdebug` 负责“直接操作正在运行的 VCS 或 Xcelium 仿真”，`xsva` 负责”assertion 的 temporal 语义先降成 IR，再解释给人和 agent”，`xcov` 负责“coverage database 里哪些 scope/object/bin 已覆盖或未覆盖，并给出源码 evidence”，`xverif-mcp` 负责”把确定性工具统一暴露给 AI agent 的 MCP 协议入口”。
+简单说：`xdebug` 负责“事实从哪里来、某时刻发生了什么”，`xbit` 负责“这些值按 SystemVerilog 规则算出来到底是多少”，`xentry` 负责“这个 entry 的 bit 域段按配置切出来是什么”，`xloc` 负责“这条 log 在哪个文件的哪一行，但只在需要时才查”，`xwiki` 负责“把验证环境、DUT 功能、workflow、debug 入口等知识编译进持续 LLM wiki”，`xsimdebug` 负责“直接操作正在运行的 VCS 或 Xcelium 仿真”，`xsva` 负责”assertion 的 temporal 语义先降成 IR，再解释给人和 agent”，`xcov` 负责“coverage database 里哪些 scope/object/bin 已覆盖或未覆盖，并给出源码 evidence”，`xwaveform` 负责“把导出的波形数据渲染成图，用于宏观观察，但不替代确定性证据”，`xverif-mcp` 负责”把确定性工具统一暴露给 AI agent 的 MCP 协议入口”。
 
 ## 工具概览
+
+下面先说明所有工具共用的输出格式，再逐个说明每个工具的用途和入口。
 
 ### 默认输出格式：XOUT
 
@@ -55,14 +58,7 @@ printf '%s\n' '{"api_version":"xdebug.v1","action":"actions"}' | tools/xdebug --
 tools/xverif-mcp
 ```
 
-`tools/xverif-mcp` 是统一 stdio MCP server（`python -m xverif_mcp.server`），xdebug 作为设计/波形 stateful backend，xcov 作为 coverage stateful backend，xbit/xentry/xloc/xsva 以 stateless CLI adapter 接入。
-如果 AI 客户端在登录机、NPI/FSDB 查询需要跑到 LSF 计算节点，可以设置 `XVERIF_MCP_BACKEND=lsf`，让 MCP wrapper 通过 `bsub -I` 启动集群内 per-session stdio-loop 进程。不同 session 并行，同一 session 串行。
-MCP 始终提供全部工具组、状态修改和文件输出能力；配置项与旧版本迁移见 [MCP README](xverif_mcp/README.md)。
-如果不走 MCP 且本机无法直连计算节点 TCP 端口，xdebug 原生支持 `transport:"file"`，通过共享文件系统在 session 目录下交换 request/response。
-
-所有 MCP tool 通用支持 `xverif_output_path` / `xverif_output_append` 参数，可将响应同时写入文件；文件写入失败会返回 `OUTPUT_WRITE_FAILED`，不能把原 action 成功当作完整成功。
-
-完整说明见 [`xdebug/README.md`](xdebug/README.md)。
+NPI engine 是 source-only wrapper：用户需要自行在已合法授权的 Synopsys 安装上编译并运行。见 [`xdebug/README.md`](xdebug/README.md) 与 [`THIRD_PARTY.md`](THIRD_PARTY.md)。
 
 ### xbit
 
@@ -192,6 +188,15 @@ MCP 工具入口使用对称的 `xverif_cov_session_open/list/doctor/close/kill/
 
 完整说明见 [`xcov/README.md`](xcov/README.md)，agent 能力说明见 [`skills/xverif/references/xcov.md`](skills/xverif/references/xcov.md)，MCP 运行环境问题见 [`skills/xverif-admin/SKILL.md`](skills/xverif-admin/SKILL.md)。
 
+## Agent 与 MCP 接入
+
+`tools/xverif-mcp` 是统一 stdio MCP server（`python -m xverif_mcp.server`），xdebug 作为设计/波形 stateful backend，xcov 作为 coverage stateful backend，xbit/xentry/xloc/xsva 以 stateless CLI adapter 接入。
+如果 AI 客户端在登录机、NPI/FSDB 查询需要跑到 LSF 计算节点，可以设置 `XVERIF_MCP_BACKEND=lsf`，让 MCP wrapper 通过 `bsub -I` 启动集群内 per-session stdio-loop 进程。不同 session 并行，同一 session 串行。
+MCP 始终提供全部工具组、状态修改和文件输出能力；配置项与旧版本迁移见 [MCP README](xverif_mcp/README.md)。
+如果不走 MCP 且本机无法直连计算节点 TCP 端口，xdebug 原生支持 `transport:"file"`，通过共享文件系统在 session 目录下交换 request/response。
+
+所有 MCP tool 通用支持 `xverif_output_path` / `xverif_output_append` 参数，可将响应同时写入文件；文件写入失败会返回 `OUTPUT_WRITE_FAILED`，不能把原 action 成功当作完整成功。
+
 ## 推荐 Shell 入口
 
 为了在任意目录和非交互 shell 中稳定调用，建议把统一 wrapper 目录加入 `PATH`。示例中的 `<xverif-root>` 表示本仓库根目录，请按本机实际路径替换。
@@ -238,15 +243,65 @@ Claude Code、Codex 等 AI agent 通常由 IDE、插件或独立进程启动，�
 
 同步规则是“当前环境中存在的变量覆盖配置里的同名变量；当前环境中没有的旧变量保持不变”。脚本不做敏感变量过滤，运行前请确认当前 shell 里允许落盘的 token、key、password 等变量。
 
+## 通过 ssh 使用 EDA 机器
+
+NPI、FSDB 和 coverage 查询需要一台装有 Verdi 且有 license 的机器。当 agent 跑在另一台机器上时——
+例如 AI 服务器能上外网、EDA 服务器不能——把 EDA 机器的 MCP server 通过 ssh 暴露出来，而不是
+搬运数据：
+
+```json
+{
+  "mcpServers": {
+    "xverif-remote": {
+      "command": "<本地-conda-env>/bin/python",
+      "args": ["-m", "mcp_ssh"],
+      "env": {
+        "PYTHONPATH": "<本地-xverif>/xverif_mcp/src",
+        "XVERIF_MCP_SSH_HOST": "user@eda-host",
+        "XVERIF_MCP_SSH_REMOTE_ROOT": "<EDA机器上的-xverif-路径>",
+        "XVERIF_MCP_SSH_REMOTE_PYTHON": "<EDA机器上的-python-3.11+>"
+      }
+    }
+  }
+}
+```
+
+`command` 由 MCP client 在 **agent 所在的本机**启动，所以 `command` 和 `PYTHONPATH` 填本地路径；
+`XVERIF_MCP_SSH_*` 全部描述 EDA 机器，只在 `ssh` 连上之后才用到，填远端仓库路径和远端解释器。
+两台机器只需都能访问同一份仓库（NAS 共享挂载是常见做法），**不需要共享 `$HOME`**：会话完全在
+EDA 机器上，状态落在它自己的 `$HOME` 下。
+
+`mcp_ssh` 只做转发：工具 schema 与调用结果原样透传，所有 xverif 语义仍由远端 server 决定，
+每个 MCP 连接对应一个独立的远端进程。MCP client `env` 中的变量（例如 `VERDI_HOME` 和 license
+设置）会转发给远端进程；凭据形状的变量永不转发，描述本机的变量（如 `HOME`、`SSH_AUTH_SOCK`）
+也不转发。可用 `python -m mcp_ssh --check` 自检配置，它只打印变量名和远端工具数，不打印任何
+取值。跨机器共享 `~/.xdebug` 只对 [`xdebug/README.md`](xdebug/README.md) 里的 cluster file
+transport 有意义，那是另一套机制。完整配置项与排障顺序见 [`xverif_mcp/README.md`](xverif_mcp/README.md)。
+
 ## 环境要求
 
 | 组件 | 要求 |
 |---|---|
 | GCC | **5.0+** |
-| Python | 3.11+（xverif-mcp、xsva、xcov）；xbit/xentry/xloc 支持 3.6+ |
+| Python | 3.11+（xverif-mcp、xsva、xcov）；xbit/xentry/xloc 为 3.10+ |
 | Verdi | 当前基于 **V-2023.12-SP2** 开发与测试，NPI API 随版本不同可能存在参数差异 |
 
 > 如果使用其他 Verdi 版本遇到编译或运行时 NPI 兼容性问题，可让 AI agent 根据编译错误和 NPI 头文件进行兼容性修复。
+
+> **编译环境的适用范围。** `xdebug` 和 `xcov` 需要链接外部商业 EDA 软件（Verdi
+> NPI/FSDB、coverage runtime），并且依赖站点的 C++ 工具链、libstdc++ ABI、zlib 位置和
+> license 配置。因此本项目不保证、也无法保证在所有环境下都能编译通过，也不承诺覆盖所有
+> OS/编译器/Verdi 版本组合。由本地工具链或本项目未针对其开发的 Verdi 安装导致的编译、链接
+> 失败不在本项目范围内，请自行在你们的环境里解决，例如改用 libstdc++ ABI 与已安装
+> `libnpiL1.so` 匹配的编译器，或在本地适配 wrapper。反过来说，能证明是仓库自身缺陷、并且
+> 能在文档化的受支持组合上复现的问题，仍然属于本项目范围。
+
+对 `xdebug` 来说，仅满足 GCC 版本要求还不够：编译器的 libstdc++ dual ABI 必须与本地
+`libnpiL1.so` 一致。`make -C xdebug` 会在构建 NPI engine 前，先编译并链接一个最小的
+`npi_fsdb_sig_value_at(std::string&)` 探针；也可以用
+`make -C xdebug npi-toolchain-check` 单独执行。该探针不会初始化 NPI，也不会占用 license。
+若探针报告 L1 string symbol 未定义，应选择 C++ 标准库 ABI 与当前 Verdi library 匹配的
+编译器，不能假定命令行设置 `_GLIBCXX_USE_CXX11_ABI` 一定能覆盖编译器的 `c++config.h`。
 
 ## 构建与测试
 
@@ -272,6 +327,12 @@ pytest --xverif-fixture-validation --xverif-all-fixtures
 pytest --xverif-fixture-clean
 pytest --xverif-results-clean
 ```
+
+正式 gate、fixture prepare 和 fixture validation 默认每 30 秒打印一条 `[xverif-progress]` 心跳，展示累计
+时长、完成数以及当前 test/fixture/phase；可用 `--xverif-progress-interval <seconds>` 调整。每次运行在
+`.xverif-test-results/<run>/` 持续写入 `progress.jsonl`，结束时生成按耗时降序的 `timing.json`；gate 的
+`report.json` 还记录 wall-clock 与 suite 聚合时长。终端汇总列出最慢 5 项，fixture 项同时标出最慢的
+builder/probe phase。
 
 依赖检查按 suite 隔离：focused suite 不会检查其它 suite 的 Vim/Neovim、NPI、VIP、VCS 或 LSF 依赖。普通 gate 只检查运行依赖和已发布 Fixture；VCS/VIP/XIF 构建依赖只在对应 prepare/validation 前检查。`xloc.nvim` 要求 `nvim` 在 `PATH` 中；本机安装在 `~/.local/bin` 时应确保 Conda 激活后仍保留该目录。
 
@@ -300,3 +361,13 @@ pytest --xverif-results-clean
 - xcov 用户文档：[`xcov/README.md`](xcov/README.md)
 - xcov agent reference：[`skills/xverif/references/xcov.md`](skills/xverif/references/xcov.md)
 - xverif-mcp 用户文档：[`xverif_mcp/README.md`](xverif_mcp/README.md)
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=blank2077%2Fxverif&type=date&legend=bottom-right">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=blank2077/xverif&type=timeline&theme=dark&legend=bottom-right" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=blank2077/xverif&type=timeline&legend=bottom-right" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=blank2077/xverif&type=timeline&legend=bottom-right" />
+ </picture>
+</a>

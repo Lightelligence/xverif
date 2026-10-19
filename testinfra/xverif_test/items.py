@@ -12,6 +12,7 @@ import pytest
 
 from .catalog import Suite
 from .errors import ExternalSuiteFailure
+from .interpreters import resolve_interpreter_argv
 
 
 @dataclass(frozen=True)
@@ -37,7 +38,7 @@ class ExternalSuiteItem(pytest.Item):
 
     def runtest(self) -> None:
         runner = self.suite.runner
-        argv = tuple(str(value) for value in runner.get("argv", []))
+        argv = resolve_interpreter_argv(runner.get("argv", []))
         if not argv:
             raise ExternalSuiteFailure(
                 self.suite.id,
