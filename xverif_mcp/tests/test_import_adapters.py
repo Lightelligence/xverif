@@ -7,6 +7,42 @@ from inspect import signature
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_xbit_published_mcp_examples_execute_with_documented_results():
+    import ast
+    import json
+    import re
+    from xverif_mcp.adapters.xbit import bit_eval, bit_check
+
+    tree = ast.parse((ROOT / 'xverif_mcp/src/xverif_mcp/server.py').read_text(encoding='utf-8'))
+    functions = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
+    for name, adapter, field, expected in [
+        ('xverif_bit_eval', bit_eval, 'unsigned', 17),
+        ('xverif_bit_check', bit_check, 'matched', True),
+    ]:
+        doc = ast.get_docstring(functions[name])
+        example = re.search(r'Example: (\{[^\n]+\})', doc)
+        assert example, name
+        result = adapter(**json.loads(example.group(1)))
+        assert result['ok'] is True
+        assert (result['result'][field] if field == 'unsigned' else result[field]) == expected
+
+
+def test_xbit_check_file_bindings_are_equivalent_to_inline_and_false_is_success(tmp_path):
+    import json
+    from xverif_mcp.adapters.xbit import bit_check
+
+    bindings = {'actual': "8'h11", 'expected': "8'h12"}
+    values = tmp_path / 'values.json'
+    values.write_text(json.dumps(bindings), encoding='utf-8')
+    inline = bit_check('actual == expected', vars=bindings, output_format='json')
+    file_result = bit_check('actual == expected', values=str(values), output_format='json')
+    assert inline == file_result
+    assert inline['ok'] is True and inline['matched'] is False
+    # A values argument names a file; it is never a scalar expected value.
+    missing = bit_check('17', values=str(tmp_path / '0x11'), output_format='json')
+    assert missing['ok'] is False
+
+
 def test_stateless_adapter_defaults_are_token_efficient_xout() -> None:
     from xverif_mcp.adapters.xbit import bit_check, bit_conv, bit_eval, bit_slice
     from xverif_mcp.adapters.xentry import entry_decode, entry_explain, entry_validate
@@ -130,5 +166,4 @@ def test_xsva_adapter_rejects_malformed_tool_response(monkeypatch):
     result = sva_parse("input.sva", "p", output_format="json")
     assert result["ok"] is False
     assert result["error"]["code"] == "INVALID_TOOL_RESPONSE"
-
 

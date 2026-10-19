@@ -122,7 +122,7 @@ def bit_slice(value: str, msb: int, lsb: int, state: str = "2",
 def bit_check(expr: str, vars: Optional[dict] = None,
               values: Optional[str] = None, state: str = "2",
               output_format: str = "xout") -> Any:
-    """Check a bit expression against expected values."""
+    """Evaluate a condition; values is a JSON bindings file, alternative to vars."""
     try:
         var_items = _var_items(vars)
         if values is not None and not isinstance(values, str):
