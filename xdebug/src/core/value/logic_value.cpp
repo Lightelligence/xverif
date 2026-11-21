@@ -372,6 +372,23 @@ LogicJson logic_value_json(const LogicValue& value, ValueRenderFormat format) {
         parse_fsdb_binary_aggregate(
             logic_value_compact_string(value),
             aggregate_has_x, aggregate_has_z);
+    if (!value.valid) {
+        // The published logicValue contract can only describe four-state data:
+        // an unknown value must attribute its unknown-ness to an x or a z bit,
+        // and the value string must not be empty.  A rejected literal has no
+        // bit pattern and no display text, so rendering it verbatim would emit
+        // {"value":"","known":false,"has_x":false,"has_z":false} and trip the
+        // runtime response-schema validator.  Report it as an all-unknown
+        // value instead; the raw spelling stays available in the error field
+        // and in LogicValue::raw for callers that need to report a diagnostic.
+        const std::string raw = trim(value.raw);
+        return LogicJson{
+            {"value", raw.empty() ? "'bx" : raw},
+            {"known", false},
+            {"has_x", true},
+            {"has_z", false},
+        };
+    }
     if (opaque_aggregate) {
         // An aggregate has no scalar radix conversion.  Hex, binary and
         // decimal requests all retain the FSDB aggregate spelling.
@@ -424,6 +441,24 @@ void apply_value_render_format(LogicJson& response, ValueRenderFormat format) {
         const int width = response.value("width", 0);
         LogicValue value = logic_value_from_bits(response["bits"].get<std::string>(), width);
         LogicJson rendered = logic_value_json(value, format);
+        // Replace the value object, do not merge into it.  Keys that the new
+        // rendering does not produce, such as has_x/has_z after a value became
+        // known or the dec-format reason after it stopped being requested,
+        // must be dropped; leaving them behind produces combinations the
+        // published logicValue contract rejects, for example known:true
+        // alongside has_x.
+        static const char* const kOptionalKeys[] = {
+            "width",
+            "bits",
+            "has_x",
+            "has_z",
+            "requested_value_format",
+            "effective_value_format",
+            "value_format_reason",
+        };
+        for (const char* key : kOptionalKeys) {
+            if (!rendered.contains(key)) response.erase(key);
+        }
         for (auto it = rendered.begin(); it != rendered.end(); ++it) response[it.key()] = it.value();
     }
     for (auto it = response.begin(); it != response.end(); ++it)
