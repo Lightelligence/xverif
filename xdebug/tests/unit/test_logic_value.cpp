@@ -201,5 +201,94 @@ int main() {
     assert(!c_hex.valid);
     assert(c_hex.error.find("0x prefix is not accepted") != std::string::npos);
 
+    // A rejected literal has no bit pattern and no display text.  Rendering it
+    // verbatim used to emit {"value":"","known":false,"has_x":false,
+    // "has_z":false}, which violates the published logicValue contract on two
+    // counts: value must not be empty, and an unknown value must attribute its
+    // unknown-ness to an x or a z bit.  Such an object aborted the whole
+    // response with INTERNAL_RESPONSE_SCHEMA_VIOLATION instead of returning a
+    // value row.
+    {
+        const LogicValue empty = logic_value_from_fsdb_raw("", 'b');
+        assert(!empty.valid);
+        const Json empty_json = logic_value_json(empty);
+        assert(!empty_json["value"].get<std::string>().empty());
+        assert(empty_json["known"] == false);
+        assert(empty_json["has_x"] == true);
+        assert(empty_json["has_z"] == false);
+        assert(empty_json.size() == 4);
+
+        const Json empty_dec = logic_value_json(empty, ValueRenderFormat::Dec);
+        assert(!empty_dec["value"].get<std::string>().empty());
+        assert(!empty_dec.contains("requested_value_format"));
+        assert(!empty_dec.contains("effective_value_format"));
+        assert(!empty_dec.contains("value_format_reason"));
+
+        const LogicValue malformed = logic_value_from_fsdb_raw("4'bg", 'b');
+        assert(!malformed.valid);
+        const Json malformed_json = logic_value_json(malformed);
+        assert(malformed_json["value"] == "4'bg");
+        assert(malformed_json["known"] == false);
+        assert(malformed_json["has_x"] == true);
+        assert(malformed_json["has_z"] == false);
+
+        // The NOT_FOUND sentinel that read_sig_vec_value_at_with_status writes
+        // into its value vector must not escape as a value object either.
+        const LogicValue sentinel = logic_value_from_fsdb_raw("NOT_FOUND", 'b');
+        assert(!sentinel.valid);
+        const Json sentinel_json = logic_value_json(sentinel);
+        assert(sentinel_json["value"] == "NOT_FOUND");
+        assert(sentinel_json["known"] == false);
+        assert(sentinel_json["has_x"] == true);
+
+        // The still-valid invalid aggregate keeps its own diagnostics.
+        const Json invalid_aggregate_json = logic_value_json(invalid_aggregate);
+        assert(invalid_aggregate_json["value"] == "'b{0101,bad}");
+        assert(invalid_aggregate_json["known"] == false);
+        assert(invalid_aggregate_json["has_x"] == true);
+        assert(invalid_aggregate_json["has_z"] == false);
+    }
+
+    // apply_value_render_format must replace a value object, not merge into it.
+    // Merging left stale has_x/has_z next to known:true and stale
+    // requested_value_format keys next to a hex rendering, both of which the
+    // published contract rejects.
+    {
+        Json known_with_stale_flags = {
+            {"value", "4'h1"},
+            {"known", true},
+            {"width", 4},
+            {"bits", "0001"},
+            {"has_x", false},
+            {"has_z", false},
+        };
+        apply_value_render_format(
+            known_with_stale_flags, ValueRenderFormat::Dec);
+        assert(known_with_stale_flags["value"] == "4'd1");
+        assert(known_with_stale_flags["known"] == true);
+        assert(!known_with_stale_flags.contains("has_x"));
+        assert(!known_with_stale_flags.contains("has_z"));
+
+        Json unknown_dec = {
+            {"value", "8'bxxxxzzzz"},
+            {"known", false},
+            {"width", 8},
+            {"bits", "xxxxzzzz"},
+            {"has_x", true},
+            {"has_z", true},
+            {"requested_value_format", "dec"},
+            {"effective_value_format", "bin"},
+            {"value_format_reason", "decimal cannot preserve per-bit X/Z"},
+        };
+        apply_value_render_format(unknown_dec, ValueRenderFormat::Hex);
+        assert(unknown_dec["value"] == "8'hxz");
+        assert(unknown_dec["known"] == false);
+        assert(unknown_dec["has_x"] == true);
+        assert(unknown_dec["has_z"] == true);
+        assert(!unknown_dec.contains("requested_value_format"));
+        assert(!unknown_dec.contains("effective_value_format"));
+        assert(!unknown_dec.contains("value_format_reason"));
+    }
+
     return 0;
 }
